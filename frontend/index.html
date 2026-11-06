@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>GeoDocker Challenge</title>
+    <!-- Estilos do Leaflet para renderização do mapa -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { height: 100vh; width: 75%; float: left; }
+        #form-container { width: 23%; float: right; padding: 15px; box-sizing: border-box; }
+        input, textarea, select, button { width: 100%; margin-bottom: 12px; padding: 8px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+
+    <!-- Contentor do Mapa -->
+    <div id="map"></div>
+
+    <!-- Contentor do Formulário -->
+    <div id="form-container">
+        <h2>Registar Ocorrência</h2>
+        <p><small>Clique num ponto do mapa para definir a localização geográfica.</small></p>
+        
+        <form id="ocorrenciaForm">
+            <input type="text" id="titulo" placeholder="Título da ocorrência" required>
+            <textarea id="descricao" placeholder="Descrição detalhada"></textarea>
+            
+            <label for="categoria">Categoria:</label>
+            <select id="categoria">
+                <option value="Buraco em via">Buraco em via pública</option>
+                <option value="Alagamento">Alagamento</option>
+                <option value="Lixo">Descarte irregular de lixo</option>
+                <option value="Iluminação">Falha de iluminação</option>
+                <option value="Acessibilidade">Problema de acessibilidade</option>
+            </select>
+            
+            <label for="status">Prioridade / Status:</label>
+            <select id="status">
+                <option value="Pendente">Pendente</option>
+                <option value="Em Resolução">Em Resolução</option>
+                <option value="Resolvido">Resolvido</option>
+            </select>
+            
+            <label for="imagem">Fotografia:</label>
+            <input type="file" id="imagem" accept="image/*" required>
+            
+            <!-- Coordenadas preenchidas automaticamente ao clicar no mapa -->
+            <input type="hidden" id="lat">
+            <input type="hidden" id="lng">
+            
+            <button type="button" onclick="salvarOcorrencia()">Guardar Ocorrência</button>
+        </form>
+    </div>
+
+    <!-- Script do Leaflet -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // 1. INICIALIZAR O MAPA (Centrado em Belém do Pará)
+        var map = L.map('map').setView([-1.45502, -48.49018], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // 2. CAPTURAR CLIQUE NO MAPA PARA DEFINIR COORDENADAS
+        var markerTemporario;
+        map.on('click', function(e) {
+            if (markerTemporario) map.removeLayer(markerTemporario);
+            markerTemporario = L.marker(e.latlng).addTo(map);
+            document.getElementById('lat').value = e.latlng.lat;
+            document.getElementById('lng').value = e.latlng.lng;
+        });
+
+        // 3. BUSCAR E EXIBIR OCORRÊNCIAS (READ)
+        function carregarMarcadores() {
+            fetch('http://localhost:8000/ocorrencias/')
+                .then(res => res.json())
+                .then(data => {
+                    data.forEach(oc => {
+                        var m = L.marker([oc.lat, oc.lng]).addTo(map);
+                        var popupContent = `
+                            <div style="max-width: 200px;">
+                                <h4>${oc.titulo}</h4>
+                                <p><b>Categoria:</b> ${oc.categoria}</p>
+                                <p><b>Status:</b> ${oc.status}</p>
+                                <p>${oc.descricao}</p>
+                                <img src="${oc.imagem_url}" style="width:100%; height:auto; border-radius:4px;"><br><br>
+                                <button onclick="editar(${oc.id})" style="background:#ffc107; color:black; margin-bottom:5px;">Editar Status</button>
+                                <button onclick="deletar(${oc.id})" style="background:#dc3545; color:white;">Eliminar</button>
+                            </div>
+                        `;
+                        m.bindPopup(popupContent);
+                    });
+                });
+        }
+
+        // 4. GUARDAR NOVA OCORRÊNCIA (CREATE)
+        function salvarOcorrencia() {
+            var lat = document.getElementById('lat').value;
+            var lng = document.getElementById('lng').value;
+            
+            if (!lat || !lng) {
+                alert("Por favor, selecione primeiro um ponto no mapa!");
+                return;
+            }
+
+            var formData = new FormData();
+            formData.append("titulo", document.getElementById('titulo').value);
+            formData.append("descricao", document.getElementById('descricao').value);
+            formData.append("categoria", document.getElementById('categoria').value);
+            formData.append("status", document.getElementById('status').value);
+            formData.append("lat", lat);
+            formData.append("lng", lng);
+            formData.append("file", document.getElementById('imagem').files[0]);
+
+            fetch('http://localhost:8000/ocorrencias/', {
+                method: 'POST',
+                body: formData
+            }).then(() => {
+                alert('Ocorrência guardada com sucesso!');
+                location.reload();
+            });
+        }
+
+        // 5. ATUALIZAR STATUS (UPDATE)
+        function editar(id) {
+            var novoStatus = prompt("Digite o novo status (Pendente, Em Resolução, Resolvido):");
+            if (novoStatus) {
+                var formData = new FormData();
+                formData.append("status", novoStatus);
+                
+                fetch(`http://localhost:8000/ocorrencias/${id}`, {
+                    method: 'PUT',
+                    body: formData
+                }).then(() => {
+                    alert('Status atualizado com sucesso!');
+                    location.reload();
+                });
+            }
+        }
+
+        // 6. ELIMINAR OCORRÊNCIA (DELETE)
+        function deletar(id) {
+            if (confirm("Tem a certeza que deseja eliminar esta ocorrência?")) {
+                fetch(`http://localhost:8000/ocorrencias/${id}`, { method: 'DELETE' })
+                    .then(() => { location.reload(); });
+            }
+        }
+
+        // Carrega os dados mal a página abre
+        carregarMarcadores();
+    </script>
+</body>
+</html>

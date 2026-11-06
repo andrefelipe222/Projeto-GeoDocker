@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # 1. Serviço de Frontend (Servidor Web Nginx com HTML e Leaflet)
+  frontend:
+    build: ./frontend # Constrói a imagem a partir da pasta ./frontend
+    ports:
+      - "8080:80" # Mapeia a porta 8080 do PC para a 80 do contentor
+    depends_on:
+      - backend # Garante arranque após a API estar disponível
+    networks:
+      - geonet # Associa o serviço à rede isolada geonet
+
+  # 2. Serviço de Backend (API REST em FastAPI)
+  backend:
+    build: ./backend # Constrói a imagem a partir da pasta ./backend
+    ports:
+      - "8000:8000" # Expõe a API REST na porta 8000
+    environment:
+      # Passagem dos nomes dos serviços como endereço na rede Docker
+      - DATABASE_URL=postgresql://geo_user:geo_pass@db:5432/geo_db
+      - S3_ENDPOINT=storage:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=ocorrencias
+    depends_on:
+      - db
+      - storage
+    networks:
+      - geonet
+
+  # 3. Serviço de Base de Dados (PostgreSQL)
+  db:
+    image: postgres:15-alpine # Imagem leve oficial do PostgreSQL
+    environment:
+      - POSTGRES_USER=geo_user
+      - POSTGRES_PASSWORD=geo_pass
+      - POSTGRES_DB=geo_db
+    volumes:
+      # Volume persistente para os dados não serem apagados no docker compose down
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - geonet
+
+  # 4. Serviço de Armazenamento de Fotografias (MinIO / S3)
+  storage:
+    image: minio/minio # Imagem oficial do MinIO
+    command: server /data --console-address ":9001" # Inicia a API S3 e a consola web
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      # Volume persistente para as imagens
+      - miniodata:/data
+    ports:
+      - "9000:9000" # API S3
+      - "9001:9001" # Painel de Administração
+    networks:
+      - geonet
+
+# Definição da rede bridge para comunicação entre serviços por nome
+networks:
+  geonet:
+    driver: bridge
+
+# Definição dos volumes persistentes
+volumes:
+  pgdata:
+  miniodata:
