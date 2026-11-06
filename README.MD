@@ -4,8 +4,8 @@ Aplicação web de mapeamento colaborativo de ocorrências urbanas (buracos, ala
 
 ---
 ## Menbros
-   Brenno Yasuhei
-   Ronald Bruno
+   Brenno Yasuhei|
+   Ronald Bruno|
    André Felipe
 
 ## 1. Arquitetura e Estrutura do Sistema
